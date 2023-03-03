@@ -1,0 +1,57 @@
+---
+title: "Empirical Q"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+library(lubridate)
+source('ACCode.R')
+```
+
+
+```{r}
+# prep stock data
+nvidia_raw <- read.csv('data/Nvidia.csv')
+fm_raw <- read.csv('data/Nvidia.csv')
+# we want to start 1250 days before 1/1/2005: 6/31/2001
+nvidia_raw$t <- as.Date(nvidia_raw$Date, "%m/%d/%y")
+nvidia_raw <- nvidia_raw %>% arrange(t) 
+nvidia <- nvidia_raw %>% filter(t>"2001-06-30")
+fm_raw$t <- as.Date(fm_raw$Date, "%m/%d/%y")
+fm_raw <- fm_raw %>% arrange(t) 
+fm <- fm_raw %>% filter(t>"2001-06-30")
+
+# prep series
+nvidia_returns <- diff(nvidia$Open,differences=1,lag=1)/nvidia$Open[1:(nrow(nvidia)-1)]
+nvidia_volatility <- nvidia_returns**2
+fm_returns <- diff(fm$Open,differences=1,lag=1)/fm$Open[1:(nrow(fm)-1)]
+fm_volatility <- fm_returns**2
+```
+
+
+```{r}
+# confirm we can replicate. note: this is quite slow
+nvidia_out <- garchConformalForcasting(nvidia_returns,alpha=0.1,gamma=0.005)
+fm_out <- garchConformalForcasting(fm_returns,alpha=0.1,gamma=0.005)
+```
+
+
+```{r}
+local_coverage_rate <- function(error){
+  local_coverage <- rep(0,length(error))
+  error <- c(rep(NaN,250),error,rep(NaN,250))  # pad with NaN
+  for (t in 250:(length(error)-250)){
+    local_coverage[t-250] <- 1 - (sum(error[(t-250+1):(t+250)])/sum(!is.na(error[(t-250+1):(t+250)])))}
+  return(local_coverage)
+}
+
+plot(nvidia$t[1250:(length(nvidia_out[2][[1]])+1250-1)],local_coverage_rate(nvidia_out[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
+lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(nvidia_out[3][[1]]),'l',col='red')
+abline(h=0.9)
+
+plot(fm$t[1250:(length(fm_out[2][[1]])+1250-1)],local_coverage_rate(fm_out[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
+lines(fm$t[1250:(length(fm_out[3][[1]])+1250-1)],local_coverage_rate(fm_out[3][[1]]),'l',col='red')
+abline(h=0.9)
+```
+
