@@ -9,11 +9,12 @@ library(lubridate)
 source('ACCode.R')
 ```
 
+### Just Replicate Figure 1
 
 ```{r}
 # prep stock data
 nvidia_raw <- read.csv('data/Nvidia.csv')
-fm_raw <- read.csv('data/Nvidia.csv')
+fm_raw <- read.csv('data/FannieMae.csv')
 # we want to start 1250 days before 1/1/2005: 6/31/2001
 nvidia_raw$t <- as.Date(nvidia_raw$Date, "%m/%d/%y")
 nvidia_raw <- nvidia_raw %>% arrange(t) 
@@ -27,6 +28,13 @@ nvidia_returns <- diff(nvidia$Open,differences=1,lag=1)/nvidia$Open[1:(nrow(nvid
 nvidia_volatility <- nvidia_returns**2
 fm_returns <- diff(fm$Open,differences=1,lag=1)/fm$Open[1:(nrow(fm)-1)]
 fm_volatility <- fm_returns**2
+```
+
+```{r}
+plot(nvidia$t[1:(nrow(nvidia)-1)],nvidia_returns,'l',main='NVIDIA Returns')
+plot(nvidia$t[1:(nrow(nvidia)-1)],nvidia_volatility,'l',main='NVIDIA Volatility')
+plot(fm$t[1:(nrow(fm)-1)],fm_returns,'l',main='Fannie Mae Returns')
+plot(fm$t[1:(nrow(fm)-1)],fm_volatility,'l',main='Fannie Mae Volatility')
 ```
 
 
@@ -54,4 +62,62 @@ plot(fm$t[1250:(length(fm_out[2][[1]])+1250-1)],local_coverage_rate(fm_out[2][[1
 lines(fm$t[1250:(length(fm_out[3][[1]])+1250-1)],local_coverage_rate(fm_out[3][[1]]),'l',col='red')
 abline(h=0.9)
 ```
+
+```{r}
+# look at how much alpha_t changes, which they didn't show
+plot(nvidia$t[1250:(length(nvidia_out[1][[1]])+1250-1)],local_coverage_rate(nvidia_out[1][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA Alpha_t')
+```
+
+### How Much Does Q Change?
+
+```{r}
+
+# modify the function to fix Q and S in time
+
+garchConformalForcasting_fixedQS <- function(returns,alpha,gamma,lookback=1250,garchP=1,garchQ=1,startUp = 100,verbose=FALSE,updateMethod="Simple",momentumBW = 0.95){
+  T <- length(returns)
+  startUp <- max(startUp,lookback)
+  garchSpec <- ugarchspec(mean.model=list(armaOrder = c(0, 0),include.mean=FALSE),variance.model=list(model="sGARCH",garchOrder=c(1,1)),distribution.model="norm")
+  alphat <- alpha
+  ### Initialize data storage variables
+  errSeqOC <- rep(0,T-startUp+1)
+  errSeqNC <- rep(0,T-startUp+1)
+  alphaSequence <- rep(alpha,T-startUp+1)
+  scores <- rep(0,T-startUp+1)
+  
+  for(t in startUp:T){
+    if(verbose){
+      print(t)
+    }
+    ### Fit garch model and compute new conformity score
+    garchFit <- ugarchfit(garchSpec, returns[(t-lookback+1):(t-1) ],solver="hybrid")
+    sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=1))
+    scores[t-startUp + 1] <- abs(returns[t]^2- sigmaNext^2)/sigmaNext^2
+    
+    recentScores <- scores[max(t-startUp+1 - lookback + 1,1):(t-startUp)]
+    
+    ### compute errt for both methods
+    errSeqOC[t-startUp+1] <- as.numeric(scores[t-startUp + 1] > quantile(recentScores,1-alphat))
+    errSeqNC[t-startUp+1] <- as.numeric(scores[t-startUp + 1] > quantile(recentScores,1-alpha))
+    
+    ### update alphat
+    alphaSequence[t-startUp+1] <- alphat
+    if(updateMethod=="Simple"){
+      alphat <- alphat + gamma*(alpha - errSeqOC[t-startUp+1])
+    }else if(updateMethod=="Momentum"){
+      w <- rev(momentumBW^(1:(t-startUp+1)))
+      w <- w/sum(w)
+      alphat <- alphat + gamma*(alpha - sum(errSeqOC[1:(t-startUp+1)]*w))
+    }
+    if(t %% 100 == 0){
+      print(sprintf("Done %g steps",t))
+    }
+  }
+  
+  return(list(alphaSequence,errSeqOC,errSeqNC))
+}
+```
+
+
+
 
