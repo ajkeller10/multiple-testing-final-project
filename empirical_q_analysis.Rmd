@@ -56,16 +56,21 @@ local_coverage_rate <- function(error){
 
 plot(nvidia$t[1250:(length(nvidia_out[2][[1]])+1250-1)],local_coverage_rate(nvidia_out[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
 lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(nvidia_out[3][[1]]),'l',col='red')
+lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(rbinom(n=length(nvidia_out[3][[1]]),size=1,p=0.1)),'l',col='grey')
 abline(h=0.9)
 
 plot(fm$t[1250:(length(fm_out[2][[1]])+1250-1)],local_coverage_rate(fm_out[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
 lines(fm$t[1250:(length(fm_out[3][[1]])+1250-1)],local_coverage_rate(fm_out[3][[1]]),'l',col='red')
+lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(rbinom(n=length(nvidia_out[3][[1]]),size=1,p=0.1)),'l',col='grey')
 abline(h=0.9)
 ```
 
 ```{r}
 # look at how much alpha_t changes, which they didn't show
 plot(nvidia$t[1250:(length(nvidia_out[1][[1]])+1250-1)],local_coverage_rate(nvidia_out[1][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA Alpha_t')
+abline(h=.9)
+plot(fm$t[1250:(length(fm_out[1][[1]])+1250-1)],local_coverage_rate(fm_out[1][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae Alpha_t')
+abline(h=.9)
 ```
 
 ### How Much Does Q Change?
@@ -83,22 +88,24 @@ garchConformalForcasting_fixedQS <- function(returns,alpha,gamma,lookback=1250,g
   errSeqOC <- rep(0,T-startUp+1)
   errSeqNC <- rep(0,T-startUp+1)
   alphaSequence <- rep(alpha,T-startUp+1)
-  scores <- rep(0,T-startUp+1)
+  scores <- rep(0,T-startUp+1+1250)
   
-  for(t in startUp:T){
+  # start up!
+  garchFit <- ugarchfit(garchSpec, returns[(startUp-lookback+1):(startUp-1) ],solver="hybrid")
+  sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=1250))  # 1250 calibration set
+  scores[1:1250] <- abs(returns[startUp]^2- sigmaNext^2)/sigmaNext^2  # use these scores forever!
+  
+  for(t in startUp+1:T){
     if(verbose){
       print(t)
     }
-    ### Fit garch model and compute new conformity score
-    garchFit <- ugarchfit(garchSpec, returns[(t-lookback+1):(t-1) ],solver="hybrid")
-    sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=1))
-    scores[t-startUp + 1] <- abs(returns[t]^2- sigmaNext^2)/sigmaNext^2
-    
-    recentScores <- scores[max(t-startUp+1 - lookback + 1,1):(t-startUp)]
+    sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=1250+t))
+    sigmaNext <- sigmaNext[length(sigmaNext)]
+    scores[1250 + t-startUp] <- abs(returns[t]^2- sigmaNext^2)/sigmaNext^2
     
     ### compute errt for both methods
-    errSeqOC[t-startUp+1] <- as.numeric(scores[t-startUp + 1] > quantile(recentScores,1-alphat))
-    errSeqNC[t-startUp+1] <- as.numeric(scores[t-startUp + 1] > quantile(recentScores,1-alpha))
+    errSeqOC[t-startUp+1] <- as.numeric(scores[t-startUp + 1] > quantile(scores[1],1-alphat))
+    errSeqNC[t-startUp+1] <- as.numeric(scores[t-startUp + 1] > quantile(scores[1],1-alpha))
     
     ### update alphat
     alphaSequence[t-startUp+1] <- alphat
@@ -109,6 +116,9 @@ garchConformalForcasting_fixedQS <- function(returns,alpha,gamma,lookback=1250,g
       w <- w/sum(w)
       alphat <- alphat + gamma*(alpha - sum(errSeqOC[1:(t-startUp+1)]*w))
     }
+    # ensure alphat is between 0 and 1
+    alphat <- max(alphat,0)
+    alphat <- min(alphat,1)
     if(t %% 100 == 0){
       print(sprintf("Done %g steps",t))
     }
@@ -118,6 +128,23 @@ garchConformalForcasting_fixedQS <- function(returns,alpha,gamma,lookback=1250,g
 }
 ```
 
+```{r}
+nvidia_out_fixed <- garchConformalForcasting_fixedQS(nvidia_returns,alpha=0.1,gamma=0.005)
+fm_out_fixed <- garchConformalForcasting_fixedQS(fm_returns,alpha=0.1,gamma=0.005)
+```
+
+```{r}
+
+plot(nvidia$t[1250:(length(nvidia_out_fixed[2][[1]])+1250-1)],local_coverage_rate(nvidia_out_fixed[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
+lines(nvidia$t[1250:(length(nvidia_out_fixed[3][[1]])+1250-1)],local_coverage_rate(nvidia_out_fixed[3][[1]]),'l',col='red')
+lines(nvidia$t[1250:(length(nvidia_out_fixed[3][[1]])+1250-1)],local_coverage_rate(rbinom(n=length(nvidia_out_fixed[3][[1]]),size=1,p=0.1)),'l',col='grey')
+abline(h=0.9)
+
+plot(fm$t[1250:(length(fm_out_fixed[2][[1]])+1250-1)],local_coverage_rate(fm_out_fixed[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
+lines(fm$t[1250:(length(fm_out_fixed[3][[1]])+1250-1)],local_coverage_rate(fm_out_fixed[3][[1]]),'l',col='red')
+lines(fm$t[1250:(length(fm_out_fixed[3][[1]])+1250-1)],local_coverage_rate(rbinom(n=length(fm_out_fixed[3][[1]]),size=1,p=0.1)),'l',col='grey')
+abline(h=0.9)
+```
 
 
 
