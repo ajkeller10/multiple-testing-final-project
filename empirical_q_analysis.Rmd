@@ -23,9 +23,9 @@ fm_raw$t <- as.Date(fm_raw$Date, "%m/%d/%y")
 fm_raw <- fm_raw %>% arrange(t) 
 fm <- fm_raw %>% filter(t>"2001-06-30")
 
-# shorten for faster execution [remove at end]
-nvidia <- nvidia %>% filter(t<"2010-12-31")
-fm <- fm %>% filter(t<"2010-12-31")
+# uncomment for faster execution
+#nvidia <- nvidia %>% filter(t<"2010-12-31")
+#fm <- fm %>% filter(t<"2010-12-31")
 
 # prep series
 nvidia_returns <- diff(nvidia$Open,differences=1,lag=1)/nvidia$Open[1:(nrow(nvidia)-1)]
@@ -93,13 +93,15 @@ lines(
   'l',col='grey')
 abline(h=0.9)
 legend("bottomright",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
-```
 
-```{r}
 # look at how much alpha_t changes, which they didn't show
-plot(nvidia$t[1250:(length(nvidia_out[1][[1]])+1250-1)],nvidia_out[1][[1]],'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA Alpha_t')
+plot(
+  nvidia$t[1250:(length(nvidia_out[1][[1]])+1250-1)],nvidia_out[1][[1]],
+  'l',col='blue',xlab='Time',ylab='alpha_t',main='NVIDIA Alpha_t')
 abline(h=.1)
-plot(fm$t[1250:(length(fm_out[1][[1]])+1250-1)],fm_out[1][[1]],'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae Alpha_t')
+plot(
+  fm$t[1250:(length(fm_out[1][[1]])+1250-1)],fm_out[1][[1]],
+  'l',col='blue',xlab='Time',ylab='alpha_t',main='Fannie Mae Alpha_t')
 abline(h=.1)
 ```
 
@@ -179,7 +181,7 @@ lines(
   local_coverage_rate(rbinom(n=length(nvidia_out_fixed[3][[1]]),size=1,p=0.1)),
   'l',col='grey')
 abline(h=0.9)
-legend("bottomright",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
+legend("topright",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
 
 plot(
   fm$t[2000:(length(fm_out_fixed[2][[1]])+2000-1)],
@@ -197,19 +199,45 @@ lines(
   local_coverage_rate(rbinom(n=length(fm_out_fixed[3][[1]]),size=1,p=0.1)),
   'l',col='grey')
 abline(h=0.9)
-legend("bottomright",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
+legend("topleft",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
 
 # look at how much alpha_t changes, which they didn't show
 plot(
   nvidia$t[2000:(length(nvidia_out_fixed[1][[1]])+2000-1)],
   nvidia_out_fixed[1][[1]],
-  'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA Alpha_t')
+  'l',col='blue',xlab='Time',ylab='alpha_t',main='NVIDIA Alpha_t')
 abline(h=.1)
 plot(
   fm$t[2000:(length(fm_out_fixed[1][[1]])+2000-1)],
   fm_out_fixed[1][[1]],
-  'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae Alpha_t')
+  'l',col='blue',xlab='Time',ylab='alpha_t',main='Fannie Mae Alpha_t')
 abline(h=.1)
+```
+```{r}
+# compare alphat's
+# look at how much alpha_t changes, which they didn't show
+plot(
+  nvidia$t[1250:(length(nvidia_out[1][[1]])+1250-1)],nvidia_out[1][[1]],
+  'l',col='black',xlab='Time',ylab='alpha_t',main='NVIDIA Alpha_t')
+lines(
+  nvidia$t[2000:(length(nvidia_out_fixed[1][[1]])+2000-1)],
+  ylim=range(nvidia_out[1][[1]],nvidia_out_fixed[1][[1]]),
+  nvidia_out_fixed[1][[1]],
+  'l',col='green')
+abline(h=.1)
+legend("topleft",legend=c("Original Method","Fixed Method"),fill=c("black","green"))
+
+plot(
+  fm$t[1250:(length(fm_out[1][[1]])+1250-1)],fm_out[1][[1]],
+  ylim=range(fm_out[1][[1]],fm_out_fixed[1][[1]]),
+  'l',col='black',xlab='Time',ylab='alpha_t',main='Fannie Mae Alpha_t')
+lines(
+  fm$t[2000:(length(fm_out_fixed[1][[1]])+2000-1)],
+  fm_out_fixed[1][[1]],
+  'l',col='green')
+abline(h=.1)
+legend("topleft",legend=c("Original Method","Fixed Method"),fill=c("black","green"))
+
 ```
 
 
