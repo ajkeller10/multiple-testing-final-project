@@ -214,6 +214,37 @@ plot(
 abline(h=.1)
 ```
 ```{r}
+
+# compare standard results
+plot(
+  nvidia$t[2000:(length(nvidia_out[3][[1]])+2000-1)],
+  local_coverage_rate(nvidia_out[3][[1]]),
+  ylim=range(
+    local_coverage_rate(nvidia_out[3][[1]]),
+    local_coverage_rate(nvidia_out_fixed[3][[1]])),
+  'l',col='black',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
+lines(
+  nvidia$t[2000:(length(nvidia_out_fixed[3][[1]])+2000-1)],
+  local_coverage_rate(nvidia_out_fixed[3][[1]]),
+  'l',col='green')
+abline(h=0.9)
+legend("bottomleft",legend=c("Unadaptive Online","Unadaptive Fixed"),fill=c("black","green"))
+
+# compare standard results
+plot(
+  fm$t[2000:(length(fm_out[3][[1]])+2000-1)],
+  local_coverage_rate(fm_out[3][[1]]),
+  ylim=range(
+    local_coverage_rate(fm_out[3][[1]]),
+    local_coverage_rate(fm_out_fixed[3][[1]])),
+  'l',col='black',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
+lines(
+  fm$t[2000:(length(fm_out_fixed[3][[1]])+2000-1)],
+  local_coverage_rate(fm_out_fixed[3][[1]]),
+  'l',col='green')
+abline(h=0.9)
+legend("bottomright",legend=c("Unadaptive Online","Unadaptive Fixed"),fill=c("black","green"))
+
 # compare adaptive results
 plot(
   nvidia$t[2000:(length(nvidia_out[2][[1]])+2000-1)],
