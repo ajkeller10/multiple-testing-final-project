@@ -1,6 +1,6 @@
 ---
 title: "Adaptive Conformal Inference"
-author: "Charles Mayville"
+author: "Drew Keller, Charles Mayville"
 date: "3/8/2023"
 output: 
   pdf_document:
