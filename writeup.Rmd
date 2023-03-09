@@ -2,11 +2,12 @@
 title: "Adaptive Conformal Inference"
 author: "Drew Keller, Charles Mayville"
 date: "3/8/2023"
-output: 
+output:
+  html_document:
+    df_print: paged
   pdf_document:
-    extra_dependencies: ["mathtools"]
+    extra_dependencies: mathtools
     latex_engine: xelatex
-
 ---
 
 ```{r setup, include=FALSE}
@@ -15,11 +16,11 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Summary
 
-With the increased application of black box models like machine learning algorithms to high stakes problems, the importance of having tools to quantify the uncertainty of their predictions rises, especially since these models are not explicit in what drives their predictions and where they might go wrong.
+With the increased prevalence of less-interpretable models like machine learning algorithms, the importance of distribution-free tools to quantify the prediction uncertainty has increased (especially since these classes of models are less explicit in what drives their predictions and where they might go wrong).
 
-One of the most popular tools to address this problem is conformal inference. Conformal inference allows us to measure the predictive power of otherwise non-transparent models by calculating a “conformity score” on model generated predictions and their real data counterparts. However, conformal inference relies quite heavily on exchangeability assumptions, which are often not met in real world applications, in particular settings that are heavily time dependent.
+One of the most popular approaches to address this problem is conformal inference. Conformal inference allows us to measure the predictive power of otherwise non-transparent models by calculating a “conformity score” on model generated predictions and their observed counterparts. However, conformal inference relies quite heavily on exchangeability assumptions, which are often not met in real world applications, in particular settings that are heavily time dependent.
 
-In response, Gibbes and Candès devise a new method: adaptive conformal inference (ACI). ACI works to measure predictive power of models in settings without exchangeability by revealing data increment by increment in  “time steps”, and adjusting the procedure based on the coverage rate in a particular time step.
+In response, Gibbs and Candès (I. Gibbs and E. Cand`es, “Adaptive conformal inference under distribution shift,” arXiv:2106.00170, 2021.) devise a new method: adaptive conformal inference (ACI). ACI works to measure predictive power of models in settings without exchangeability in which data is revealed incrementally, by adjusting the procedure based on the coverage rate in each time step.
 
 They show that given a long enough time, ACI meets target coverage without additional assumptions in situations where standard conformal inference fails. Additionally they show that given small distribution assumptions, ACI is robust for most time steps.
 
@@ -72,6 +73,8 @@ where weights are $\in[0,1]$ and sum to 1. (Obviously, $w_t=1$ is equivalent to 
 
 The authors note that this adaptive inference procedure works for any choice of quantile and score functions (assuming those functions are definitionally valid, e.g. the quantile function must be nondecreasing). However, they also acknowledge that the procedure’s performance is sensitive to quality of conformity scores. In particular, the closer to stationary the conformity score (despite shifts in the data distribution), the closer the procedure will stay to target coverage. 
 
+The authors do not spend much time addressing the choice of initial $\alpha_0$, but it seems clear that $\alpha_0=\alpha$ should be the best choice in the absence of any prior beliefs about the magnitude and direction of distribution shift.
+
 The authors prove two main performance guarantees for the procedure. First, they show that over a long time interval, adaptive conformal inference converges on the targeted coverage frequency without any distributional assumptions:
 
 $$ \lim_{T \to \infty} \frac{1}{T} \sum_{t=1}^T \textrm{err}_t \stackrel{a.s.}{=} \alpha.$$
@@ -93,9 +96,9 @@ where $M$ is the realized miscoverage rate, $A$ indicates the hidden state of th
 
 Gibbs and Candès point out three limitations with their method. First, their method is devised with the assumption that data is revealed in an online manner: the true value of each time step is revealed before prediction of the next time step. While this assumption is met in some cases (like stock market data), there are many settings in which data is received in batches. On top of making it hard to evaluate settings where data is irregular over time, it prevents the evaluation scheme from distinguishing between “bad” prediction subsets and “good” ones merely by conditioning on time.
 
-Another limitation of the more strict theoretical performance result is that they assume a fixed quantile function, $\hat{Q}(\cdot)$, predetermined without influence from new data. Gibbs and Candès prove that fitting $\hat{Q}_t(\cdot)$ in an online fashion to the most recent data similar to $\alpha_t$ will provide correct coverage given sufficiently large time intervals. However, the proof of short term bounds given good initialization of $\alpha_1$ relies on a fixed $\hat{Q}(\cdot)$, limiting the theoretical performance of the fully online method. The online method was used in their following experiments, showing that it does have practical success. We further investigate this discrepancy below.
+Another limitation of the more strict theoretical performance result is that the authors assume a fixed quantile function, $\hat{Q}(\cdot)$, predetermined without influence from new data. Gibbs and Candès prove that fitting $\hat{Q}_t(\cdot)$ in an online fashion to the most recent data similar to $\alpha_t$ will provide correct coverage given sufficiently large time intervals. However, the proof of short term bounds given good initialization of $\alpha_1$ relies on a fixed $\hat{Q}(\cdot)$, limiting the theoretical performance of the fully online method. The online method was used in their following experiments, showing that it does have practical success. We further investigate this discrepancy below.
 
-A third limitation of the procedure is that they specify no theoretical guidelines for choosing an effective $\gamma$. A proper choice of time step for the data is extremely important, as too large values of $\gamma$ induce volatility in the coverage produced at each step $\alpha_t$. This will cause the procedure to heavily penalize predictive power in particular time steps and reward it in others, which could be undesirable in cases where the underlying model has some degree of robustness over time. In their experiments they settle on a choice of $\gamma = 0.005$, but acknowledge that this has no guarantee of success in other applications.
+A third limitation of the procedure is that the authors specify no theoretical guidelines for choosing an effective $\gamma$. A proper choice of step size for the data is extremely important, as too large values of $\gamma$ induce volatility in the coverage produced at each step $\alpha_t$. In their experiments they settle on a choice of $\gamma = 0.005$, but acknowledge that this has no guarantee of success in other applications.
 
 A limitation not mentioned by the authors comes from common procedures to reduce the computational complexity of conformal inference methods. One such procedure is to limit the calculation of the prediction set to the interval observed in the data. In standard conformal inference, this simplification is guaranteed to not adjust the coverage by much for large $n$, as:
 
@@ -123,11 +126,15 @@ Define the sequence $\alpha_s$ given a target $\alpha$, fixing a step size param
 
 $$ \alpha_{s+1} := \alpha_s + \gamma(\alpha - \textrm{err}_s). $$
 for $\textrm{err}_s$:
-$$ \textrm{err}_s := \frac{1}{\textrm{\# i in s}}\sum_{i \in s}
+$$ \textrm{err}_s := \frac{1}{\textrm{# i in s}}\sum_{i \in s}
 \mathbb{1} \{ Y_{s_i} \notin \hat{C}_{s_i}(\alpha_s)\}
 $$
 
 Intuitively what we are doing is rather than adjusting the value of $\alpha$ for every data point $s_i$, we are adjusting it per chunk of data $s$ by the rate of coverage in that chunk.
+
+An important note here regards the choice of $\gamma$ for this procedure. A good rule of thumb is to select $\gamma$ that is higher than the $\gamma$ used in the original method by roughly a factor of the number of data points per time step, or slightly below. (Or, we could define the procedure such that each adjustment is proportional to the number of time steps in the relevant batch, which would be preferable for variable batch sizes but reduce flexibility for constant-size batches.) Otherwise, this procedure will adjust $alpha_t$ too slowly relative to the original procedure. The reason that we might select $\gamma$ slightly lower than a simple multiple of original $\gamma$ is that using the simple multiple, the batched procedure will adjust $\alpha_t$ by _more_ than the online procedure, since the online procedure's updates will reduce as $\alpha_t$ approaches $\alpha_t^*$.
+
+A final note here: In the alternative setting in which we receive batches of data in which we _do_ know the ordering of data in the batch, it is likely preferable to use the original online procedure in order to not "overshoot" $\alpha_t^*$ (though the online procedure is somewhat more computationally expensive).
 
 ## Long term coverage for modified procedure
 
@@ -203,4 +210,13 @@ We mention here but do not implement a number of other possible extensions to th
 * The weighted method proposed by the authors could be better analyzed, both theoretically and over a broad range of weights (extending to uniform weights). The authors say that they found it to be similar in performance to the unweighted method, but only mention testing it with a quite rapid decrease in weight going back in time. 
 * On a related note, it would be valuable to evaluate other methods of adding momentum to $\alpha_t$ updates. For example, if we have missed coverage quite a few times recently, we guess that we are in the midst of a distribution shift and so accelerate quantile widening by even more. Specifically, we could apply momentum implementations similar to those often used in gradient descent. This would make sense in light of the online-learning view of the $\alpha_t$ updates (although, unlike in many other gradient-descent settings, $\alpha_t$ optimization must be convex). The weighting proposed by the authors achieves this to a significant degree (in fact, they call the weighting “momentum” in their code!) but is not directly equivalent to several other momentum approaches.
 * The authors apply ACI to prediction of the next time step, but it could be extended in a straightforward manner to prediction intervals for longer forecast horizons, which would be updated each time step as well.
-* Finally, it would be interesting to explore the use of ACI in a setting where the prediction model is moving between different environments (as opposed to the environment changing over time). 
+* Finally, it would be interesting to explore the use of ACI in a setting where the prediction model is moving between different environments (as opposed to the environment changing over time).
+
+# Conclusion
+
+As proposed by Gibbs and Candès, adaptive conformal inference is a powerful extension of conformal inference for the online setting; despite some limitations in its performance guarantees, it appears to perform quite well in practice. ACI provides a solid platform for additional experimentation and extension. 
+
+# Code & Additional Figures
+
+https://github.com/ajkeller10/multiple-testing-final-project
+
