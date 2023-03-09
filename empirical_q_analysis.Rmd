@@ -23,6 +23,10 @@ fm_raw$t <- as.Date(fm_raw$Date, "%m/%d/%y")
 fm_raw <- fm_raw %>% arrange(t) 
 fm <- fm_raw %>% filter(t>"2001-06-30")
 
+# uncomment for faster execution
+#nvidia <- nvidia %>% filter(t<"2010-12-31")
+#fm <- fm %>% filter(t<"2010-12-31")
+
 # prep series
 nvidia_returns <- diff(nvidia$Open,differences=1,lag=1)/nvidia$Open[1:(nrow(nvidia)-1)]
 nvidia_volatility <- nvidia_returns**2
@@ -50,27 +54,55 @@ local_coverage_rate <- function(error){
   local_coverage <- rep(0,length(error))
   error <- c(rep(NaN,250),error,rep(NaN,250))  # pad with NaN
   for (t in 250:(length(error)-250)){
-    local_coverage[t-250] <- 1 - (sum(error[(t-250+1):(t+250)])/sum(!is.na(error[(t-250+1):(t+250)])))}
+    local_coverage[t-250] <- 1 - (sum(error[(t-250+1):(t+250)],na.rm=TRUE)/sum(!is.na(error[(t-250+1):(t+250)])))}
   return(local_coverage)
 }
 
-plot(nvidia$t[1250:(length(nvidia_out[2][[1]])+1250-1)],local_coverage_rate(nvidia_out[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
-lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(nvidia_out[3][[1]]),'l',col='red')
-lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(rbinom(n=length(nvidia_out[3][[1]]),size=1,p=0.1)),'l',col='grey')
+plot(
+  nvidia$t[1250:(length(nvidia_out[2][[1]])+1250-1)],
+  local_coverage_rate(nvidia_out[2][[1]]),
+  ylim=range(
+    local_coverage_rate(nvidia_out[2][[1]]),
+    local_coverage_rate(nvidia_out[3][[1]])),
+  'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
+lines(
+  nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],
+  local_coverage_rate(nvidia_out[3][[1]]),
+  'l',col='red')
+lines(
+  nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],
+  local_coverage_rate(rbinom(n=length(nvidia_out[3][[1]]),size=1,p=0.1)),
+  'l',col='grey')
 abline(h=0.9)
+legend("bottomright",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
 
-plot(fm$t[1250:(length(fm_out[2][[1]])+1250-1)],local_coverage_rate(fm_out[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
-lines(fm$t[1250:(length(fm_out[3][[1]])+1250-1)],local_coverage_rate(fm_out[3][[1]]),'l',col='red')
-lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(rbinom(n=length(nvidia_out[3][[1]]),size=1,p=0.1)),'l',col='grey')
+plot(
+  fm$t[1250:(length(fm_out[2][[1]])+1250-1)],
+  local_coverage_rate(fm_out[2][[1]]),
+  ylim=range(
+    local_coverage_rate(fm_out[2][[1]]),
+    local_coverage_rate(fm_out[3][[1]])),
+  'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
+lines(
+  fm$t[1250:(length(fm_out[3][[1]])+1250-1)],
+  local_coverage_rate(fm_out[3][[1]]),
+  'l',col='red')
+lines(
+  nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],
+  local_coverage_rate(rbinom(n=length(nvidia_out[3][[1]]),size=1,p=0.1)),
+  'l',col='grey')
 abline(h=0.9)
-```
+legend("bottomright",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
 
-```{r}
 # look at how much alpha_t changes, which they didn't show
-plot(nvidia$t[1250:(length(nvidia_out[1][[1]])+1250-1)],local_coverage_rate(nvidia_out[1][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA Alpha_t')
-abline(h=.9)
-plot(fm$t[1250:(length(fm_out[1][[1]])+1250-1)],local_coverage_rate(fm_out[1][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae Alpha_t')
-abline(h=.9)
+plot(
+  nvidia$t[1250:(length(nvidia_out[1][[1]])+1250-1)],nvidia_out[1][[1]],
+  'l',col='blue',xlab='Time',ylab='alpha_t',main='NVIDIA Alpha_t')
+abline(h=.1)
+plot(
+  fm$t[1250:(length(fm_out[1][[1]])+1250-1)],fm_out[1][[1]],
+  'l',col='blue',xlab='Time',ylab='alpha_t',main='Fannie Mae Alpha_t')
+abline(h=.1)
 ```
 
 ### How Much Does Q Change?
@@ -79,42 +111,42 @@ abline(h=.9)
 
 # modify the function to fix Q and S in time
 
-garchConformalForcasting_fixedQS <- function(returns,alpha,gamma,lookback=1250,garchP=1,garchQ=1,startUp = 100,verbose=FALSE,updateMethod="Simple",momentumBW = 0.95){
+garchConformalForcasting_fixedQS <- function(returns,alpha,gamma,garchP=1,garchQ=1,training = 1250,calibration=1250,verbose=FALSE,updateMethod="Simple",momentumBW = 0.95){
   T <- length(returns)
-  startUp <- max(startUp,lookback)
-  garchSpec <- ugarchspec(mean.model=list(armaOrder = c(0, 0),include.mean=FALSE),variance.model=list(model="sGARCH",garchOrder=c(1,1)),distribution.model="norm")
+  garchSpec <- ugarchspec(
+    mean.model=list(armaOrder = c(0,0),include.mean=FALSE), 
+    variance.model = list(model="sGARCH", garchOrder=c(1,1)), distribution.model="norm")
   alphat <- alpha
   ### Initialize data storage variables
-  errSeqOC <- rep(0,T-startUp+1)
-  errSeqNC <- rep(0,T-startUp+1)
-  alphaSequence <- rep(alpha,T-startUp+1)
-  scores <- rep(0,T-startUp+1+1250)
+  errSeqOC <- rep(0,T-training-calibration)
+  errSeqNC <- rep(0,T-training-calibration)
+  alphaSequence <- rep(alpha,T-training-calibration)
+
+  # get fixed score and quantile function!
+  garchFit <- ugarchfit(garchSpec, returns[1:training],solver="hybrid")
+  sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=calibration))
+  scores <- abs(returns[(training+1):(training+calibration)]^2- sigmaNext^2)/sigmaNext^2
   
-  # start up!
-  garchFit <- ugarchfit(garchSpec, returns[(startUp-lookback+1):(startUp-1) ],solver="hybrid")
-  sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=1250))  # 1250 calibration set
-  scores[1:1250] <- abs(returns[startUp]^2- sigmaNext^2)/sigmaNext^2  # use these scores forever!
-  
-  for(t in startUp+1:T){
+  for(t in 1:(T-training-calibration)){
     if(verbose){
       print(t)
     }
-    sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=1250+t))
+    sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=calibration+t))
     sigmaNext <- sigmaNext[length(sigmaNext)]
-    scores[1250 + t-startUp] <- abs(returns[t]^2- sigmaNext^2)/sigmaNext^2
+    current_score <- abs(returns[t+training+calibration]^2- sigmaNext^2)/sigmaNext^2
     
     ### compute errt for both methods
-    errSeqOC[t-startUp+1] <- as.numeric(scores[t-startUp + 1] > quantile(scores[1],1-alphat))
-    errSeqNC[t-startUp+1] <- as.numeric(scores[t-startUp + 1] > quantile(scores[1],1-alpha))
+    errSeqOC[t] <- as.numeric(current_score > quantile(scores,1-alphat))
+    errSeqNC[t] <- as.numeric(current_score > quantile(scores,1-alpha))
     
     ### update alphat
-    alphaSequence[t-startUp+1] <- alphat
+    alphaSequence[t] <- alphat
     if(updateMethod=="Simple"){
-      alphat <- alphat + gamma*(alpha - errSeqOC[t-startUp+1])
+      alphat <- alphat + gamma*(alpha - errSeqOC[t])
     }else if(updateMethod=="Momentum"){
-      w <- rev(momentumBW^(1:(t-startUp+1)))
+      w <- rev(momentumBW^(1:t))
       w <- w/sum(w)
-      alphat <- alphat + gamma*(alpha - sum(errSeqOC[1:(t-startUp+1)]*w))
+      alphat <- alphat + gamma*(alpha - sum(errSeqOC[1:t]*w))
     }
     # ensure alphat is between 0 and 1
     alphat <- max(alphat,0)
@@ -134,16 +166,139 @@ fm_out_fixed <- garchConformalForcasting_fixedQS(fm_returns,alpha=0.1,gamma=0.00
 ```
 
 ```{r}
+pts <- 1250+1250  # training+calibration
 
-plot(nvidia$t[1250:(length(nvidia_out_fixed[2][[1]])+1250-1)],local_coverage_rate(nvidia_out_fixed[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
-lines(nvidia$t[1250:(length(nvidia_out_fixed[3][[1]])+1250-1)],local_coverage_rate(nvidia_out_fixed[3][[1]]),'l',col='red')
-lines(nvidia$t[1250:(length(nvidia_out_fixed[3][[1]])+1250-1)],local_coverage_rate(rbinom(n=length(nvidia_out_fixed[3][[1]]),size=1,p=0.1)),'l',col='grey')
+plot(
+  nvidia$t[pts:(length(nvidia_out_fixed[2][[1]])+pts-1)],
+  local_coverage_rate(nvidia_out_fixed[2][[1]]),
+  ylim=range(
+    local_coverage_rate(nvidia_out_fixed[2][[1]]),
+    local_coverage_rate(nvidia_out_fixed[3][[1]])),
+  'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
+lines(
+  nvidia$t[pts:(length(nvidia_out_fixed[3][[1]])+pts-1)],
+  local_coverage_rate(nvidia_out_fixed[3][[1]]),'l',col='red')
+lines(
+  nvidia$t[pts:(length(nvidia_out_fixed[3][[1]])+pts-1)],
+  local_coverage_rate(rbinom(n=length(nvidia_out_fixed[3][[1]]),size=1,p=0.1)),
+  'l',col='grey')
 abline(h=0.9)
+legend("topright",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
 
-plot(fm$t[1250:(length(fm_out_fixed[2][[1]])+1250-1)],local_coverage_rate(fm_out_fixed[2][[1]]),'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
-lines(fm$t[1250:(length(fm_out_fixed[3][[1]])+1250-1)],local_coverage_rate(fm_out_fixed[3][[1]]),'l',col='red')
-lines(fm$t[1250:(length(fm_out_fixed[3][[1]])+1250-1)],local_coverage_rate(rbinom(n=length(fm_out_fixed[3][[1]]),size=1,p=0.1)),'l',col='grey')
+plot(
+  fm$t[pts:(length(fm_out_fixed[2][[1]])+pts-1)],
+  local_coverage_rate(fm_out_fixed[2][[1]]),
+  ylim=range(
+    local_coverage_rate(fm_out_fixed[2][[1]]),
+    local_coverage_rate(fm_out_fixed[3][[1]])),
+  'l',col='blue',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
+lines(
+  fm$t[pts:(length(fm_out_fixed[3][[1]])+pts-1)],
+  local_coverage_rate(fm_out_fixed[3][[1]]),
+  'l',col='red')
+lines(
+  fm$t[pts:(length(fm_out_fixed[3][[1]])+pts-1)],
+  local_coverage_rate(rbinom(n=length(fm_out_fixed[3][[1]]),size=1,p=0.1)),
+  'l',col='grey')
 abline(h=0.9)
+legend("topleft",legend=c("Adaptive","Fixed","Bernoulli"),fill=c("blue","red","grey"))
+
+# look at how much alpha_t changes, which they didn't show
+plot(
+  nvidia$t[pts:(length(nvidia_out_fixed[1][[1]])+pts-1)],
+  nvidia_out_fixed[1][[1]],
+  'l',col='blue',xlab='Time',ylab='alpha_t',main='NVIDIA Alpha_t')
+abline(h=.1)
+plot(
+  fm$t[pts:(length(fm_out_fixed[1][[1]])+pts-1)],
+  fm_out_fixed[1][[1]],
+  'l',col='blue',xlab='Time',ylab='alpha_t',main='Fannie Mae Alpha_t')
+abline(h=.1)
+```
+```{r}
+
+# compare standard results
+plot(
+  nvidia$t[pts:(length(nvidia_out[3][[1]])+pts-1)],
+  local_coverage_rate(nvidia_out[3][[1]]),
+  ylim=range(
+    local_coverage_rate(nvidia_out[3][[1]]),
+    local_coverage_rate(nvidia_out_fixed[3][[1]])),
+  'l',col='black',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
+lines(
+  nvidia$t[pts:(length(nvidia_out_fixed[3][[1]])+pts-1)],
+  local_coverage_rate(nvidia_out_fixed[3][[1]]),
+  'l',col='green')
+abline(h=0.9)
+legend("bottomleft",legend=c("Unadaptive Online","Unadaptive Fixed"),fill=c("black","green"))
+
+# compare standard results
+plot(
+  fm$t[pts:(length(fm_out[3][[1]])+pts-1)],
+  local_coverage_rate(fm_out[3][[1]]),
+  ylim=range(
+    local_coverage_rate(fm_out[3][[1]]),
+    local_coverage_rate(fm_out_fixed[3][[1]])),
+  'l',col='black',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
+lines(
+  fm$t[pts:(length(fm_out_fixed[3][[1]])+pts-1)],
+  local_coverage_rate(fm_out_fixed[3][[1]]),
+  'l',col='green')
+abline(h=0.9)
+legend("bottomright",legend=c("Unadaptive Online","Unadaptive Fixed"),fill=c("black","green"))
+
+# compare adaptive results
+plot(
+  nvidia$t[pts:(length(nvidia_out[2][[1]])+pts-1)],
+  local_coverage_rate(nvidia_out[2][[1]]),
+  ylim=range(
+    local_coverage_rate(nvidia_out[2][[1]]),
+    local_coverage_rate(nvidia_out_fixed[2][[1]])),
+  'l',col='black',xlab='Time',ylab='Local Coverage Level',main='NVIDIA')
+lines(
+  nvidia$t[pts:(length(nvidia_out_fixed[2][[1]])+pts-1)],
+  local_coverage_rate(nvidia_out_fixed[2][[1]]),
+  'l',col='green')
+abline(h=0.9)
+legend("topright",legend=c("Original Method","Fixed Method"),fill=c("black","green"))
+
+plot(
+  fm$t[pts:(length(fm_out[2][[1]])+pts-1)],
+  local_coverage_rate(fm_out[2][[1]]),
+  ylim=range(
+    local_coverage_rate(fm_out[2][[1]]),
+    local_coverage_rate(fm_out_fixed[2][[1]])),
+  'l',col='black',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae')
+lines(
+  fm$t[pts:(length(fm_out_fixed[2][[1]])+pts-1)],
+  local_coverage_rate(fm_out_fixed[2][[1]]),
+  'l',col='green')
+abline(h=0.9)
+legend("topright",legend=c("Original Method","Fixed Method"),fill=c("black","green"))
+
+# compare alphat's
+plot(
+  nvidia$t[1250:(length(nvidia_out[1][[1]])+1250-1)],nvidia_out[1][[1]],
+  'l',col='black',xlab='Time',ylab='alpha_t',main='NVIDIA Alpha_t')
+lines(
+  nvidia$t[pts:(length(nvidia_out_fixed[1][[1]])+pts-1)],
+  ylim=range(nvidia_out[1][[1]],nvidia_out_fixed[1][[1]]),
+  nvidia_out_fixed[1][[1]],
+  'l',col='green')
+abline(h=.1)
+legend("topleft",legend=c("Original Method","Fixed Method"),fill=c("black","green"))
+
+plot(
+  fm$t[1250:(length(fm_out[1][[1]])+1250-1)],fm_out[1][[1]],
+  ylim=range(fm_out[1][[1]],fm_out_fixed[1][[1]]),
+  'l',col='black',xlab='Time',ylab='alpha_t',main='Fannie Mae Alpha_t')
+lines(
+  fm$t[pts:(length(fm_out_fixed[1][[1]])+pts-1)],
+  fm_out_fixed[1][[1]],
+  'l',col='green')
+abline(h=.1)
+legend("topleft",legend=c("Original Method","Fixed Method"),fill=c("black","green"))
+
 ```
 
 
