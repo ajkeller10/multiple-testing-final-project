@@ -161,7 +161,14 @@ To get a quick comparison between the standard method and the modified one we ra
 ![](./images/2fmmodified.png){width="50%"}
 
 
-We do see less robustness with changes to time than standard ACI, but this is to be expected, as we have less effective time to converge to good values of alpha, and less points in time to adjust to shifts in the underlying distribution. Worryingly, the NVIDIA data between the years of 2015 and 2017 the procedure seems to achieve dramatically worse coverage than either standard ACI or standard CI. While this perhaps is not as much of an issue as it seems in this example (Gibbs and Candès too had time increments where ACI failed), it is worth pointing out the potential pitfalls of such a modification. All in all, the modified procedure seems to trade away most of the advantages of standard ACI, but could still be applicable in settings with certain data constraints.
+We do see less robustness with changes to time than standard ACI, but this is to be expected, as we have less effective time to converge to good values of alpha, and less points in time to adjust to shifts in the underlying distribution, however the effect is too large for this to be the only cause. A possible cause for this effect is that in taking large batches of data, we are effectively increasing the pressure that our small choice of $\gamma$ has on the data. If the modified and standard ACI procedures choose the same $\gamma$, in the time interval of the batch the standard procedure will update with $\gamma$ many times, where as the modified procedure will only update once.
+
+If we correct our choice of $\gamma$ to be scaled by the time size of the batch, we get results that are similarly robust to changes in time as standard ACI, confirming our hypothesis.
+
+![](./images/9nvidiamodifiedadj.png){width="50%"}
+![](./images/10fmmodifiedadj.png){width="50%"}
+
+This reinforces how important appropriate $\gamma$ selection is practice of both the modified and standard methods.
 
 # Experiment: How Applicable is the Fixed-QS Setting?
 

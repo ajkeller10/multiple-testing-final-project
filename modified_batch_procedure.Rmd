@@ -94,13 +94,24 @@ fm_volatility <- fm_returns**2
 ```
 
 ```{r}
-nvidia_out_adj_5 <- garchConformalForcasting_timestep(nvidia_returns,alpha=0.1,gamma=0.005, timeinterval=5)
+# standard gamma
+nvidia_out_adj_5 <- garchConformalForcasting_timestep(nvidia_returns,alpha=0.1,gamma=(0.005), timeinterval=5)
 
-nvidia_out_adj_10 <- garchConformalForcasting_timestep(nvidia_returns,alpha=0.1,gamma=0.005, timeinterval=10)
+nvidia_out_adj_10 <- garchConformalForcasting_timestep(nvidia_returns,alpha=0.1,gamma=(0.005), timeinterval=10)
 
 fm_out_adj_5 <- garchConformalForcasting_timestep(fm_returns,alpha=0.1,gamma=0.005, timeinterval=5)
 
 fm_out_adj_10 <- garchConformalForcasting_timestep(fm_returns,alpha=0.1,gamma=0.005, timeinterval=10)
+
+#adjusted gamma
+nvidia_out_adj_5_y <- garchConformalForcasting_timestep(nvidia_returns,alpha=0.1,gamma=(0.005 * 5), timeinterval=5)
+
+nvidia_out_adj_10_y <- garchConformalForcasting_timestep(nvidia_returns,alpha=0.1,gamma=(0.005 * 10), timeinterval=10)
+
+fm_out_adj_5_y <- garchConformalForcasting_timestep(fm_returns,alpha=0.1,gamma=(0.005 * 5), timeinterval=5)
+
+fm_out_adj_10_y <- garchConformalForcasting_timestep(fm_returns,alpha=0.1,gamma=(0.005 * 10), timeinterval=10)
+
 
 ```
 
@@ -124,8 +135,10 @@ local_coverage_rate_adj <- function(error, timeinterval){
   return(local_coverage)
 }
 
+## NVIDIA
 loc_cov_5 = local_coverage_rate_adj(nvidia_out_adj_5[2][[1]], 5)
 loc_cov_10 = local_coverage_rate_adj(nvidia_out_adj_10[2][[1]], 10)
+
 
 plot(nvidia$t[1250:(length(loc_cov_5)+1250-1)], loc_cov_5,'l',col='green',xlab='Time',ylab='Local Coverage Level',main='NVIDIA', ylim=c(.82, .95))
 
@@ -133,12 +146,13 @@ lines(nvidia$t[1250:(length(loc_cov_10)+1250-1)], loc_cov_10,'l',col='blue')
 
 lines(nvidia$t[1250:(length(nvidia_out[2][[1]])+1250-1)],local_coverage_rate(nvidia_out[2][[1]]),'l')
 
-
 lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(nvidia_out[3][[1]]),'l',col='red')
 
 abline(h=0.9)
 legend("bottomright",legend=c("standard ACI","chunk size 5", "chunk size 10", "non-corrected CI"),fill=c("black","green", "blue", "red"))
 
+
+## FM
 loc_cov_5 = local_coverage_rate_adj(fm_out_adj_5[2][[1]], 5)
 loc_cov_10 = local_coverage_rate_adj(fm_out_adj_10[2][[1]], 10)
 
@@ -146,6 +160,42 @@ loc_cov_10 = local_coverage_rate_adj(fm_out_adj_10[2][[1]], 10)
 plot(fm$t[1250:(length(loc_cov_5)+1250-1)], loc_cov_5,'l',col='green',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae', ylim=c(.82, .95))
 
 lines(fm$t[1250:(length(loc_cov_10)+1250-1)], loc_cov_10,'l',col='blue')
+
+lines(fm$t[1250:(length(fm_out[2][[1]])+1250-1)],local_coverage_rate(fm_out[2][[1]]),'l')
+
+
+lines(fm$t[1250:(length(fm_out[3][[1]])+1250-1)],local_coverage_rate(fm_out[3][[1]]),'l',col='red')
+
+abline(h=0.9)
+legend("bottomright",legend=c("standard ACI","chunk size 5", "chunk size 10", "non-corrected CI"),fill=c("black","green", "blue", "red"))
+
+
+## NVIDIA gamma
+
+loc_cov_5_y = local_coverage_rate_adj(nvidia_out_adj_5_y[2][[1]], 5)
+loc_cov_10_y = local_coverage_rate_adj(nvidia_out_adj_10_y[2][[1]], 10)
+
+
+plot(nvidia$t[1250:(length(loc_cov_5_y)+1250-1)], loc_cov_5_y,'l',col='green',xlab='Time',ylab='Local Coverage Level',main='NVIDIA (adjusted gamma)', ylim=c(.82, .95))
+
+lines(nvidia$t[1250:(length(loc_cov_10_y)+1250-1)], loc_cov_10_y,'l',col='blue')
+
+lines(nvidia$t[1250:(length(nvidia_out[2][[1]])+1250-1)],local_coverage_rate(nvidia_out[2][[1]]),'l')
+
+lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(nvidia_out[3][[1]]),'l',col='red')
+
+abline(h=0.9)
+legend("bottomright",legend=c("standard ACI","chunk size 5", "chunk size 10", "non-corrected CI"),fill=c("black","green", "blue", "red"))
+
+
+## FM gamma
+loc_cov_5_y = local_coverage_rate_adj(fm_out_adj_5_y[2][[1]], 5)
+loc_cov_10_y = local_coverage_rate_adj(fm_out_adj_10_y[2][[1]], 10)
+
+
+plot(fm$t[1250:(length(loc_cov_5_y)+1250-1)], loc_cov_5_y,'l',col='green',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae (adjusted gamma)', ylim=c(.82, .95))
+
+lines(fm$t[1250:(length(loc_cov_10_y)+1250-1)], loc_cov_10_y,'l',col='blue')
 
 lines(fm$t[1250:(length(fm_out[2][[1]])+1250-1)],local_coverage_rate(fm_out[2][[1]]),'l')
 
