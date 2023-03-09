@@ -131,7 +131,7 @@ Intuitively what we are doing is rather than adjusting the value of $\alpha$ for
 
 ## Long term coverage for modified procedure
 
-Following similar steps to the proof outlined for the standard ACI, we can get some long term coverage guarantee for our modified procedure. We will similarly assume that with probability one $\alpha_1 \in [0, 1]$ and $\hat{Q}_{s_i}$ is non decreasing and is $\infty$ for inputs greater than one and $-\infty$ for inputs less than zero.
+Following similar steps to the proof outlined for the standard ACI, we can get some long term coverage guarantee for our modified procedure. We will similarly assume that with probability one $\alpha_1 \in [0, 1]$ and $\hat{Q}_{s_i}(\cdot)$ is non decreasing and is $\infty$ for inputs greater than one and $-\infty$ for inputs less than zero.
 
 **Lemma 4.1 adjusted**: with probability one we have that $\forall s \in \mathbb{N}, \alpha_s \in [-\gamma, 1+\gamma]$.
 
@@ -139,7 +139,7 @@ Following similar steps to the proof outlined for the standard ACI, we can get s
 
 $$ \alpha_s < 0 \implies \hat{Q}_{s_i} (1 - \alpha_s) \forall i \in s \implies \textrm{err}_s = 0 \implies \alpha_{s+1} = \alpha_s + \gamma(\alpha - \textrm{err}_s) \ge \alpha_s $$
 
-and thus $P(\exists s such that \alpha_{s+1} < \alpha_s < 0) = 0$, which is a contradiction.
+and thus $P(\exists s \textrm{ such that } \alpha_{s+1} < \alpha_s < 0) = 0$, which is a contradiction.
 
 **Proposition 4.1 adjusted**: with probability one we have that $\forall S \in \mathbb{N}$,
 
