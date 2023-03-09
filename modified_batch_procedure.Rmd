@@ -1,0 +1,159 @@
+---
+title: "discreteAC"
+author: "Charles Mayville"
+date: "3/4/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(lubridate)
+source('ACCode.R')
+```
+
+### Main method for forming volatility predictions as in Figure 1
+
+```{r}
+
+garchConformalForcasting_timestep <- function(returns, alpha, gamma, lookback=1250, startUp=100, 
+                                     verbose=FALSE, updateMethod="Simple", momentumBW=0.95,
+                                     garchP=1, garchQ=1,
+                                     timeinterval=1) {
+  T <- length(returns)
+  startUp <- max(startUp,lookback)
+  alphat <- alpha
+  
+  garchSpec <- ugarchspec(mean.model=list(armaOrder=c(0, 0), include.mean=FALSE), variance.model=list(model="sGARCH", garchOrder=c(1, 1)), distribution.model="norm")
+  
+  ### Initialize data storage variables
+  errSeqOC <- rep(0,T-startUp+1)
+  alphaSequence <- rep(alpha,T-startUp+1)
+  scores <- rep(0,T-startUp+1)
+  
+  
+  t = startUp
+  while (t < T) {
+    
+    ### Fit garch model and compute new conformity score
+    garchFit <- ugarchfit(garchSpec, returns[(t-lookback+1):(t-1) ],solver="hybrid")
+    sigmaNext <- sigma(ugarchforecast(garchFit,n.ahead=1))
+    scores[(t-startUp + 1):(t-startUp + 1 + timeinterval)] <- abs(as.vector(returns[t:(t+ timeinterval)])^2- as.vector(sigmaNext)^2)/as.vector(sigmaNext)^2
+    
+    recentScores <- scores[max(t-startUp+1 - lookback + 1,1):(t-startUp)]
+    
+    ### grab data in timeinterval 
+    interval = returns[t:(t + timeinterval)]
+    errSeqOC[t-startUp+1] <- sum(as.numeric(scores[(t-startUp + 1):(t-startUp + 1 + timeinterval)] > quantile(recentScores,1-alphat))) / timeinterval
+    
+    ### update alphat
+    alphaSequence[t-startUp+1] <- alphat
+    if (updateMethod=="Simple") {
+      alphat <- alphat + gamma*(alpha - errSeqOC[t-startUp+1])
+    } else if (updateMethod=="Momentum") {
+      w <- rev(momentumBW^(1:(t-startUp+1)))
+      w <- w/sum(w)
+      alphat <- alphat + gamma*(alpha - sum(errSeqOC[1:(t-startUp+1)]*w))
+    }
+    
+    if(t %% 100 == 0){
+      print(sprintf("Done %g steps",t))
+    }
+    
+    t = t + timeinterval
+    
+  }
+  
+  errSeqOC = errSeqOC[seq(1, length(errSeqOC), timeinterval)]
+  
+  return(list(alphaSequence,rep(errSeqOC, each=timeinterval)))
+}
+
+
+
+```
+
+
+```{r}
+# prep stock data
+nvidia_raw <- read.csv('data/Nvidia.csv')
+fm_raw <- read.csv('data/FannieMae.csv')
+# we want to start 1250 days before 1/1/2005: 6/31/2001
+nvidia_raw$t <- as.Date(nvidia_raw$Date, "%m/%d/%y")
+nvidia_raw <- nvidia_raw %>% arrange(t) 
+nvidia <- nvidia_raw %>% filter(t>"2001-06-30")
+fm_raw$t <- as.Date(fm_raw$Date, "%m/%d/%y")
+fm_raw <- fm_raw %>% arrange(t) 
+fm <- fm_raw %>% filter(t>"2001-06-30")
+
+# prep series
+nvidia_returns <- diff(nvidia$Open,differences=1,lag=1)/nvidia$Open[1:(nrow(nvidia)-1)]
+nvidia_volatility <- nvidia_returns**2
+fm_returns <- diff(fm$Open,differences=1,lag=1)/fm$Open[1:(nrow(fm)-1)]
+fm_volatility <- fm_returns**2
+```
+
+```{r}
+nvidia_out_adj_5 <- garchConformalForcasting_timestep(nvidia_returns,alpha=0.1,gamma=0.005, timeinterval=5)
+
+nvidia_out_adj_10 <- garchConformalForcasting_timestep(nvidia_returns,alpha=0.1,gamma=0.005, timeinterval=10)
+
+fm_out_adj_5 <- garchConformalForcasting_timestep(fm_returns,alpha=0.1,gamma=0.005, timeinterval=5)
+
+fm_out_adj_10 <- garchConformalForcasting_timestep(fm_returns,alpha=0.1,gamma=0.005, timeinterval=10)
+
+```
+
+```{r}
+local_coverage_rate <- function(error){
+  local_coverage <- rep(0,length(error))
+  error <- c(rep(NaN,250),error,rep(NaN,250))  # pad with NaN
+  for (t in 250:(length(error)-250)){
+    local_coverage[t-250] <- 1 - (sum(error[(t-250+1):(t+250)])/sum(!is.na(error[(t-250+1):(t+250)])))}
+  return(local_coverage)
+}
+
+local_coverage_rate_adj <- function(error, timeinterval){
+  local_coverage <- rep(0,length(error))
+  error <- c(rep(NaN,250),error,rep(NaN,250))  # pad with NaN
+  for (t in 250:(length(error)-250)){
+    if (t %% timeinterval == 0) {
+      
+      local_coverage[(t-250):(t-250 + timeinterval)] <- 1 - (sum(error[(t-250+1):(t+250)])/sum(!is.na(error[(t-250+1):(t+250)])))}
+    }
+  return(local_coverage)
+}
+
+loc_cov_5 = local_coverage_rate_adj(nvidia_out_adj_5[2][[1]], 5)
+loc_cov_10 = local_coverage_rate_adj(nvidia_out_adj_10[2][[1]], 10)
+
+plot(nvidia$t[1250:(length(loc_cov_5)+1250-1)], loc_cov_5,'l',col='green',xlab='Time',ylab='Local Coverage Level',main='NVIDIA', ylim=c(.82, .95))
+
+lines(nvidia$t[1250:(length(loc_cov_10)+1250-1)], loc_cov_10,'l',col='blue')
+
+lines(nvidia$t[1250:(length(nvidia_out[2][[1]])+1250-1)],local_coverage_rate(nvidia_out[2][[1]]),'l')
+
+
+lines(nvidia$t[1250:(length(nvidia_out[3][[1]])+1250-1)],local_coverage_rate(nvidia_out[3][[1]]),'l',col='red')
+
+abline(h=0.9)
+legend("bottomright",legend=c("standard ACI","chunk size 5", "chunk size 10", "non-corrected CI"),fill=c("black","green", "blue", "red"))
+
+loc_cov_5 = local_coverage_rate_adj(fm_out_adj_5[2][[1]], 5)
+loc_cov_10 = local_coverage_rate_adj(fm_out_adj_10[2][[1]], 10)
+
+
+plot(fm$t[1250:(length(loc_cov_5)+1250-1)], loc_cov_5,'l',col='green',xlab='Time',ylab='Local Coverage Level',main='Fannie Mae', ylim=c(.82, .95))
+
+lines(fm$t[1250:(length(loc_cov_10)+1250-1)], loc_cov_10,'l',col='blue')
+
+lines(fm$t[1250:(length(fm_out[2][[1]])+1250-1)],local_coverage_rate(fm_out[2][[1]]),'l')
+
+
+lines(fm$t[1250:(length(fm_out[3][[1]])+1250-1)],local_coverage_rate(fm_out[3][[1]]),'l',col='red')
+
+abline(h=0.9)
+legend("bottomright",legend=c("standard ACI","chunk size 5", "chunk size 10", "non-corrected CI"),fill=c("black","green", "blue", "red"))
+
+
+```
